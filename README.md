@@ -1,3 +1,11 @@
+## Status
+
+2026년 11월 8일 `arbiter/` 디렉터리는 Khala 모노레포(`khala-labs/khala`)에서 28개 커밋의 git 이력을 보존한 채 본 저장소로 분리되었습니다. 본 저장소는 아카이브되지 않은 활성 상태이며, Python 3.13 환경에서 pytest를 실행하는 자체 CI를 갖추고 있습니다. Arbiter는 현재 Khala 저장소의 ADR 및 SPEC 승인 게이트로 계속 사용되고 있습니다. Arbiter가 기록하는 원장(`specs/`, `adr/`, `.reviews/`, `INDEX.md`)은 Khala 저장소에 유지되며, `ARBITER_DOCS` 환경 변수를 Khala 저장소 루트로 설정하여 참조합니다. Arbiter의 공식 문서는 Khala 문서 사이트(`https://khala-labs.github.io/khala/tools/arbiter/`, 한국어: `https://khala-labs.github.io/khala/ko/tools/arbiter/`)가 계속 기준 문서로 유지됩니다. Arbiter 자체에 대한 이슈는 본 저장소에 등록해 주시고, Khala 원장 관련 이슈는 `khala-labs/khala`에 등록해 주시기 바랍니다.
+
+On 2026-11-08, the `arbiter/` directory was extracted from the Khala monorepo (`khala-labs/khala`) into this repository with its 28-commit git history preserved. This repository is live, not archived, and now has its own CI running pytest on Python 3.13. Arbiter is currently in use as the approval gate for ADRs and SPECs in the Khala repository. The ledger Arbiter writes (`specs/`, `adr/`, `.reviews/`, `INDEX.md`) stays in `khala-labs/khala` and is located by pointing the `ARBITER_DOCS` environment variable to the Khala repository root. Arbiter's page in the Khala documentation stays the reference (`https://khala-labs.github.io/khala/tools/arbiter/`, Korean: `https://khala-labs.github.io/khala/ko/tools/arbiter/`). Issues about Arbiter itself should be filed in this repository, while issues about the Khala ledger belong in `khala-labs/khala`.
+
+---
+
 # Arbiter
 
 Arbiter is a Python MCP server and Claude Code `PreToolUse` hook that records AI-generated ADRs and design specs in a consistent Markdown+frontmatter format, enforces accountable review (AI critique → human issue-disposition → sign-off) before any code edits are written, and optionally publishes approved documents to an external Nexus sink. The gate is active during implementation: `begin_implementation` arms it, `end_implementation` disarms it. Until a spec is approved and stamped with a content hash, all `Write`/`Edit`/`MultiEdit` calls targeting non-exempt source paths are blocked.

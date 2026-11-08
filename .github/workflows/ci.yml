@@ -1,0 +1,22 @@
+# Arbiter CI. Mirrors the `arbiter` job that ran in khala-labs/khala before the
+# tool moved to its own repository on 2026-11-08.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  arbiter:
+    name: arbiter (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install
+        run: pip install -e ".[dev]" -c constraints.txt
+      - name: Run tests
+        run: python -m pytest -q
