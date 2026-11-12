@@ -180,3 +180,22 @@ def test_status_and_index_skip_markdown_without_id(docs_root):
 
     out = led.index()  # must not raise
     assert out.exists()
+
+
+def test_index_order_does_not_depend_on_filesystem_order(docs_root, monkeypatch):
+    """`glob` yields filesystem order — alphabetical on NTFS, arbitrary on ext4.
+
+    The index must not depend on it."""
+    from pathlib import Path
+
+    led = make_ledger(docs_root)
+    for title in ("Bravo", "Alpha", "Charlie"):
+        led.record("spec", title)
+    expected = led.index().read_text(encoding="utf-8")
+
+    real_glob = Path.glob
+    monkeypatch.setattr(Path, "glob", lambda self, pat: reversed(sorted(real_glob(self, pat))))
+    assert led.index().read_text(encoding="utf-8") == expected
+    order = [expected.index(f"SPEC-{n}") for n in ("alpha", "bravo", "charlie")]
+    assert order == sorted(order)
+
