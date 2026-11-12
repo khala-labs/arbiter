@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- `Ledger` walks `specs/` and `adr/` in sorted order. `glob` returns filesystem order (alphabetical on NTFS, arbitrary on ext4), so `index()` wrote a different `INDEX.md` on Windows and Linux for the same ledger.
+
 ### Breaking Changes
 
 - **Public class renames:** The two public sink types in `specledger.publish` are renamed:

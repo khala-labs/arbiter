@@ -43,7 +43,7 @@ class Ledger:
 
     def _resolve(self, artifact_id: str) -> Path:
         for d in (self.specs, self.adr):
-            for p in d.glob(f"{artifact_id}*.md"):
+            for p in sorted(d.glob(f"{artifact_id}*.md")):
                 if Artifact.load(p).id == artifact_id:
                     return p
         raise ArtifactNotFoundError(artifact_id)
@@ -51,7 +51,9 @@ class Ledger:
     def _all_paths(self) -> Iterator[Path]:
         # Only real artifacts (markdown carrying a frontmatter `id`). Non-artifact docs
         # like a README.md living in specs/ or adr/ are skipped, not crashed on.
-        for p in (*self.specs.glob("*.md"), *self.adr.glob("*.md")):
+        # Sorted: `glob` order is filesystem order (alphabetical on NTFS, arbitrary on ext4),
+        # so an unsorted walk made INDEX.md differ between Windows and Linux for the same ledger.
+        for p in (*sorted(self.specs.glob("*.md")), *sorted(self.adr.glob("*.md"))):
             try:
                 if Artifact.load(p).meta.get("id"):
                     yield p
