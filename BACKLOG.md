@@ -26,11 +26,6 @@ merged change; each one is still open in the code.
 - **`governs:` path-glob mapping:** the MVP gate is path-agnostic (any approved active
   spec allows any source edit). Add optional `governs: [src/**]` globs in spec
   frontmatter so the gate maps edits to the spec that actually governs them.
-- **Bash tool gap:** the PreToolUse hook gates `Write|Edit|MultiEdit` only; the `Bash`
-  tool can still write files (echo/tee/python -c). Consider a PreToolUse matcher for
-  Bash that inspects the command, or a complementary check. The organization roadmap
-  lists "do not gate Bash" under not-doing-by-design; whether this item stays open is
-  the owner's call (owner decision pending).
 
 ## Review depth
 - **Comprehension questions (Q4-B):** optional, high-risk-spec-only "what's the riskiest
