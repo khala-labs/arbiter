@@ -14,8 +14,16 @@ Arbiter is a Python MCP server and Claude Code `PreToolUse` hook that records AI
 
 ## Install
 
+Development install from a checkout uses `constraints.txt` to pin the resolved dependency set that CI uses. CI runs pytest on Python 3.13; `pyproject.toml` requires Python >=3.11:
+
 ```bash
-pip install -e ".[dev]"
+pip install -e ".[dev]" -c constraints.txt
+```
+
+A consumer installs from git pinned to a commit (the Khala repository's CI installs it this way). The install provides the `arbiter` command (CLI) and the module `khala.arbiter.server` (MCP server):
+
+```bash
+pip install "khala-arbiter @ git+https://github.com/khala-labs/arbiter@<commit>"
 ```
 
 ---
@@ -30,9 +38,13 @@ arbiter record spec "결제 정책 SPEC"          # register a draft → prints 
 arbiter critique SPEC-결제-정책-spec           # run the critic → prints issues
 arbiter approve  SPEC-결제-정책-spec \         # apply dispositions + sign off
     --dispositions disp.json --approver eisen
-arbiter status                                # list all artifacts and their state
-arbiter check-gate specs/SPEC-x.md            # is this path gated right now?
+arbiter status                                # list all artifacts (or pass one id)
+arbiter begin-implementation SPEC-결제-정책-spec # arm the gate for this spec
+arbiter check-gate src/app.py                 # is this path allowed right now?
+arbiter end-implementation                    # disarm the gate
 ```
+
+The CLI has seven commands: `record`, `critique`, `approve`, `status`, `begin-implementation`, `end-implementation`, and `check-gate`. `begin-implementation` checks that the id exists first and exits 1 on an unknown id. The marker it writes records `set_by: "cli"`; the MCP tool records `"agent"`. `end-implementation` on a closed gate is not an error; it prints that no implementation was open. `status` prints the `needs_review` and `tampered` flags next to each artifact. `supersede`, `index`, `publish`, `promote_external`, and `guide` exist only as MCP tools.
 
 `--dispositions` is a JSON file, one object per open issue:
 
@@ -49,6 +61,20 @@ calls the *same* `ledger` / `critique` / `review` functions the MCP tools call �
 surface, not a second implementation.
 
 Root and docs directory come from `ARBITER_ROOT` / `ARBITER_DOCS` (default: `.` and `./docs`).
+On Windows, the CLI converts an MSYS-style path such as `/c/work/project` (what Git Bash gives as `$PWD`) to `C:/work/project`; a root or docs directory that does not exist stops the CLI with exit code 2.
+
+---
+
+## Critic backends
+
+The `critique` step uses a critic chosen by the `ARBITER_CRITIC` environment variable (default `anthropic`); an unknown value is rejected with an error so a typo is not hidden.
+
+| `ARBITER_CRITIC` value | Class | What it needs |
+| --- | --- | --- |
+| `anthropic` | `AnthropicCritic` | `ANTHROPIC_API_KEY` |
+| `claude-code` | `ClaudeCodeCritic` | `claude` command on `PATH` (no API key) |
+
+`AnthropicCritic` calls the Anthropic API and reads `ANTHROPIC_API_KEY` only when a critique actually runs, so the MCP server boots and other tools run without a key (default model `claude-opus-4-8`, `max_tokens` 4096). `ClaudeCodeCritic` is keyless, running `claude -p` (Claude Code) on the host with flags that turn off built-in tools, MCP servers, user setting sources, and session persistence, so text inside a reviewed document cannot turn the review into host execution. `ARBITER_CRITIC_TIMEOUT` sets the timeout in seconds (default 300); `ARBITER_CRITIC_MODEL` optionally passes `--model`. Both critics send the same prompt and return the same shape (category, severity, description); any failure (non-zero exit, timeout, unparseable output) raises `CritiqueError`: critique fails closed.
 
 ---
 
@@ -65,6 +91,7 @@ Add to your project's `.mcp.json` (or the global `~/.claude/mcp.json`):
       "env": {
         "ARBITER_ROOT": "/abs/path/to/your/project",
         "ARBITER_DOCS": "/abs/path/to/your/project/docs",
+        "ARBITER_CRITIC": "anthropic",
         "ANTHROPIC_API_KEY": "sk-ant-..."
       }
     }
@@ -74,7 +101,8 @@ Add to your project's `.mcp.json` (or the global `~/.claude/mcp.json`):
 
 `ARBITER_ROOT` — project root where `.arbiter/` state lives (defaults to `.`).
 `ARBITER_DOCS` — directory where spec and ADR Markdown files are written (defaults to `$ARBITER_ROOT/docs`).
-`ANTHROPIC_API_KEY` — required only when using the built-in `AnthropicCritic` (the `critique` tool).
+`ARBITER_CRITIC` — `anthropic` (default) or `claude-code`; see [Critic backends](#critic-backends).
+`ANTHROPIC_API_KEY` — required only when `ARBITER_CRITIC=anthropic` and the `critique` tool runs. Leave it out for `claude-code`.
 
 ---
 
@@ -102,28 +130,32 @@ Register the gate hook in `.claude/settings.json` (project-level) or `~/.claude/
 
 The hook reads the tool payload from stdin and exits `0` (allow) or `2` (block). It respects the same `ARBITER_ROOT` / `ARBITER_DOCS` environment variables.
 
+If `ARBITER_ROOT` / `ARBITER_DOCS` are unset, the hook defaults them to the `cwd` in the hook payload and `<cwd>/docs`. If the docs directory does not exist, the hook allows the edit (the project is treated as not governed). Paths matched by `exempt_paths` in `.arbiter/config.yaml` are allowed and logged to `.arbiter/exempt.log`.
+
 > **MVP note:** The `Bash` tool is not intercepted — only the first-class file-edit tools (`Write`, `Edit`, `MultiEdit`) are gated.
 
 ---
 
-## Exposed MCP Tools (10 total)
+## Exposed MCP Tools (12 total)
 
 | Tool | Purpose |
 |---|---|
 | `record` | Create a new spec or ADR |
 | `critique` | Run AI critique → open issues in sidecar |
 | `approve` | Disposition issues + sign off → stamp content hash |
-| `status` | Report status (and detect tampering) |
+| `status` | Report status; flags `needs_review` / `tampered` without editing the files |
 | `supersede` | Mark one ADR superseded by another |
 | `begin_implementation` | Arm the gate for a specific spec |
 | `end_implementation` | Disarm the gate |
 | `check_gate` | Query whether a list of paths is currently allowed |
 | `index` | Regenerate `INDEX.md` |
 | `publish` | Push an approved doc to the Nexus sink (no-op if not configured) |
+| `promote_external` | Record an external document (inline, canonical spec format) as a governed draft SPEC/ADR, keeping its provenance in frontmatter |
+| `guide` | Return the tier and operating guidance for a document type (`ADR`, `DESIGN`, `RFC`, `PRD`, ...) |
 
 ---
 
-## Quickstart: First Consumer (Engception)
+## Quickstart (MCP flow)
 
 ```
 1. record       → Claude calls `record("spec", "Playlist Self-Update")`
@@ -161,6 +193,7 @@ nexus:
   token: "<write-capability token>"     # or set ARBITER_NEXUS_TOKEN
 ```
 
+The write token can also come from the `ARBITER_NEXUS_TOKEN` environment variable, which takes precedence over the `token` config key.
 Then call the `publish` tool. Ingest is **capability-gated** server-side: the token must carry
 Nexus's `ingest_governed` write capability — a read-only token is denied. A denied/failed task
 maps gracefully to `{"published": false, "reason": ...}`. Without any config, `publish` is a safe
@@ -175,4 +208,4 @@ no-op returning `{"published": false, "reason": "nexus not configured"}`.
 - **Path-agnostic gate:** paths are normalized relative to `ARBITER_ROOT`; no project-structure assumptions beyond the `docs/**` and `tests/**` allow-globs (configurable via `allow_globs` in config).
 - **Bash not gated:** only `Write`, `Edit`, and `MultiEdit` tools are intercepted by the PreToolUse hook.
 - **Solo-user:** the approve flow is designed for a single human approver; no multi-reviewer workflow is implemented.
-- **No database:** all state lives in Markdown files under `ARBITER_DOCS` and a small `.arbiter/` JSON marker in `ARBITER_ROOT`.
+- **No database:** all state lives in Markdown files under `ARBITER_DOCS` (`specs/`, `adr/`, `.reviews/`, `INDEX.md`) and in `.arbiter/` under `ARBITER_ROOT` (`active.json` gate marker, `exempt.log`, optional `config.yaml`).
